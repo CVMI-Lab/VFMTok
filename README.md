@@ -49,8 +49,6 @@ cd VFMTok
 ```Shell
 conda create -n vfmtok python=3.10 -y
 conda activate vfmtok
-pip install --upgrade pip  # enable PEP 660 support
-pip install -e .
 ```
 
 3. Install additional packages for training cases as required.
