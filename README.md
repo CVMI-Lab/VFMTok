@@ -51,12 +51,7 @@ conda create -n vfmtok python=3.10 -y
 conda activate vfmtok
 ```
 
-3. Install additional packages for training cases as required.
-```
-pip install -e ".[train]"
-pip install flash-attn --no-build-isolation
-```
-4. Install deformable attention module
+3. Install deformable attention module
 ```
 cd vfmtok/modules/ops
 bash make.sh
