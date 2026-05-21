@@ -21,8 +21,8 @@ This repo contains:
 * 🛸 Training and evaluation scripts for tokenizer and generative models, which were also provided in [here](./scripts).
 * 🎉 Hugging Face for easy access to pre-trained models.
 
-## <ins style="color: black; text-decoration: underline;">Announcement</ins>
-🔥<ins style="color: black; text-decoration: underline;">We further extend the principle of building image tokenizers directly upon VFMs to the domains of continuous-valued image reconstruction and generation, achieving superior performance in both tasks. The source code has been made publicly available at</ins> [VFMTok2](https://github.com/CVMI-Lab/VFMTok2.git).🔥
+## 🔥<ins style="color: black; text-decoration: underline;">Announcement</ins>🔥
+<ins style="color: black; text-decoration: underline;">We further extend the principle of building image tokenizers directly upon VFMs to the domains of continuous-valued image reconstruction and generation, achieving superior performance in both tasks. The source code has been made publicly available at</ins> [VFMTok2](https://github.com/CVMI-Lab/VFMTok2.git).
 
 ## Release
 
