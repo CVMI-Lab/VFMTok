@@ -3,13 +3,13 @@
 #   muse-maskgit-pytorch: https://github.com/lucidrains/muse-maskgit-pytorch/blob/main/muse_maskgit_pytorch/vqgan_vae.py
 import torch, pdb
 import torch.nn as nn
-from .lpips import LPIPS
 import torch.nn.functional as F
-from .gan_loss import softplus_g_loss
+from ..losses.lpips import LPIPS
 from ..engine.misc import get_world_size
-from .discriminator_dino import DinoDisc as DINODiscriminator
-from .discriminator_stylegan import Discriminator as StyleGANDiscriminator
-from .discriminator_patchgan import NLayerDiscriminator as PatchGANDiscriminator
+from ..losses.gan_loss import softplus_g_loss
+from ..discriminator.discriminator_dino import DinoDisc as DINODiscriminator
+from ..discriminator.discriminator_stylegan import Discriminator as StyleGANDiscriminator
+from ..discriminator.discriminator_patchgan import NLayerDiscriminator as PatchGANDiscriminator
 
 def hinge_d_loss(logits_real, logits_fake):
     loss_real = torch.mean(F.relu(1. - logits_real))

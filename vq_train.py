@@ -16,7 +16,7 @@ import torch.distributed as dist
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from vfmtok.engine.logger import create_logger
-from vfmtok.tokenizer.vq_loss import VQLoss
+from vfmtok.losses.vq_loss import VQLoss
 from vfmtok.tokenizer.vq_model import VQ_models
 from vfmtok.engine.ema import update_ema, requires_grad
 from torch.utils.data.distributed import DistributedSampler
@@ -24,7 +24,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from vfmtok.engine.distributed import init_distributed_mode
 from vfmtok.engine.lr_scheduler import build_scheduler
 from vfmtok.data.imagenet_lmdb import ImageNetLmdbDataset as ImageNetDataset
-from vfmtok.engine.misc import is_main_process, all_reduce_mean, concat_all_gather,get_world_size
+from vfmtok.engine.misc import (is_main_process, all_reduce_mean, concat_all_gather, get_world_size, get_rank)
 
 
 #################################################################################
@@ -40,12 +40,15 @@ def main(args):
     # Setup DDP:
     init_distributed_mode(args)
     assert args.global_batch_size % dist.get_world_size() == 0, f"Batch size must be divisible by world size."
-    rank = dist.get_rank()
+    rank = get_rank()
+    world_size = get_world_size()
     device = rank % torch.cuda.device_count()
-    seed = args.global_seed * dist.get_world_size() + rank
+
+    seed = args.global_seed * world_size + rank
     torch.manual_seed(seed)
     torch.cuda.set_device(device)
     np.random.seed(os.getpid())
+
     #* Setup an experiment folder:
     if is_main_process():
         #* Make results folder (holds all experiment subfolders)
@@ -133,10 +136,8 @@ def main(args):
     if args.vq_ckpt:
         checkpoint = torch.load(args.vq_ckpt, map_location="cpu")
         m1, u1 = vq_model.load_state_dict(checkpoint["model"],strict=False)
-        # assert sum(['backbone' in p for p in m1]) == len(m1)
         if args.ema:
             m1, u1 = ema.load_state_dict(checkpoint["ema"],strict=False)
-            # assert sum(['backbone' in p for p in m1]) == len(m1)
         optimizer.load_state_dict(checkpoint["optimizer"])
         vq_loss.discriminator.load_state_dict(checkpoint["discriminator"])
         optimizer_disc.load_state_dict(checkpoint["optimizer_disc"])

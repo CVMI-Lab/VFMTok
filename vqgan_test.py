@@ -1,23 +1,23 @@
 import json, time
 import torch, timm
 import numpy as np
-import pandas as pd
-import torch_fidelity
 import os.path as osp
 from glob import glob
 from PIL import Image
 from pathlib import Path
-import argparse, datetime
+
 from omegaconf import OmegaConf
 import tensorflow.compat.v1 as tf
 from torchvision import transforms
-import os, sys, warnings, pdb, time
+import os, warnings, argparse, pdb
+
 import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+
+from vfmtok.tokenizer.vq_model import VQ_models
 from vfmtok.evaluations.evaluator import Evaluator
 from vfmtok.data.augmentation import center_crop_arr
-from vfmtok.tokenizer.vq_model import VQ_models
+
 from torch.utils.data.distributed import DistributedSampler
 from vfmtok.engine.distributed import init_distributed_mode
 from skimage.metrics import structural_similarity as ssim_loss
@@ -62,38 +62,6 @@ def get_args_parser():
     
     return parser
 
-
-def imagenet_eval(args, gtDir = None, saveDir = None):
-
-    name = osp.basename(args.vq_ckpt).split('.')[0]
-    if (gtDir is None):
-        #* Perform evaluation on the generated images.
-        gtDir = 'imagenet/imagenet-val'
-
-    gen_names = os.listdir(args.output_dir)
-    img_names = os.listdir(gtDir)
-
-    assert len(gen_names) == len(img_names), \
-        f"generate only {len(gen_names)} images, while there are {len(img_names)} in total!"
-
-    metrics_dict = torch_fidelity.calculate_metrics(
-        input1=args.output_dir,
-        input2=gtDir,
-        cuda=True,
-        isc=True,
-        fid=True,
-        kid=False,
-        prc=False,
-        verbose=True,
-    )
-    fid_score = metrics_dict['frechet_inception_distance']
-    inception_score = metrics_dict['inception_score_mean']
-    print('FID:{:.4f}, IS: {:.4f}'.format(fid_score, inception_score))
-    with open('results.md', 'a') as fid:
-        fid.write(f'\n{name}\n')
-        fid.write('FID:{:.4f}, IS: {:.4f}\n'.format(fid_score, inception_score))
-
-
 def build_imgfolder_dataloader(imgDir, num_tasks, local_rank, args):
 
     transform = transforms.Compose([
@@ -130,14 +98,6 @@ def main(args):
 
     num_tasks = get_world_size()
     global_rank = get_rank()
-    
-    print(f'num_tasks: {num_tasks}')
-    if is_main_process() and args.log_dir is not None:
-        os.makedirs(args.log_dir, exist_ok=True)
-        log_writer = SummaryWriter(log_dir=args.log_dir)
-    else:
-        log_writer = None
-
 
     # Initialize the data loader
     assert osp.exists(args.anno_file), f'Please ensure the existence of {args.anno_file}'
@@ -186,13 +146,16 @@ def main(args):
     if is_main_process():
         print('#DataLoader: {}, num_tasks: {}'.format(len(data_loader), num_tasks))
 
-    num_protos, num_slots, eps = args.codebook_size, args.codebook_size, 1e-6
-    img_indices, slot_indices, (samples, gt, psnr_val_rgb, ssim_val_rgb) = gen_images(model, data_loader, device, args)
+    num_slots, eps = args.codebook_size, 1e-6
+    slot_indices, samples, gt, psnr_val_rgb, ssim_val_rgb = gen_images(model, data_loader, device, args)
     
     if is_main_process():
   
-        samples = np.stack(samples, axis=0)
-        gt = np.stack(gt, axis=0)
+        samples = np.concatenate(samples, axis=0)
+        gt = np.concatenate(gt, axis=0)
+        
+        psnr_val_rgb = np.concatenate(psnr_val_rgb, axis=0)
+        ssim_val_rgb = np.concatenate(ssim_val_rgb, axis=0)
 
         print(f'len(samples):{samples.shape[0]}, len(gt): {len(gt)}')
         config = tf.ConfigProto(
@@ -216,66 +179,93 @@ def main(args):
 
         print(f"rFID: {FID:04f}, rIS: {IS:04f}.")
 
-        usage_img = img_indices.size(0) / num_protos
         usage_slot = slot_indices.size(0) / num_slots
 
         psnr_val_rgb = sum(psnr_val_rgb) / (len(psnr_val_rgb) + eps)
         ssim_val_rgb = sum(ssim_val_rgb) / (len(ssim_val_rgb) + eps)
-        print('usage_img:{:.4f}, usage_slot: {:.4f},  psnr: {:.4f}, ssim: {:.4f}'.format(usage_img, usage_slot, psnr_val_rgb, ssim_val_rgb))
+        print('usage_slot: {:.4f},  psnr: {:.4f}, ssim: {:.4f}'.format(usage_slot, psnr_val_rgb, ssim_val_rgb))
         filename = osp.basename(args.vq_ckpt).split('.')[0]
         with open('results.md', 'a') as fid:
             fid.write(f'\n{filename}:\n')
             fid.write(f'rFID: {FID:04f}, rIS: {IS:04f}.\n')
-            fid.write('usage_img:{:.4f}, usage_slot: {:.5f}, PSNR: {:.4f}, SSIM: {:.4f}.\n'.format(usage_img, usage_slot, psnr_val_rgb, ssim_val_rgb))
+            fid.write('usage_slot: {:.5f}, PSNR: {:.4f}, SSIM: {:.4f}.\n'.format(usage_slot, psnr_val_rgb, ssim_val_rgb))
 
 @torch.no_grad()
 def gen_images(model, dataloader, device, args):
 
     model.eval()
     saveDir = args.output_dir
-    
     prev, total = 0, len(dataloader)
     
     model_dirs = osp.realpath(__file__).split('/')
     idx = np.argmax([len(p) for p in model_dirs])
     this_model_dir = model_dirs[idx]
 
-    img_indices = torch.Tensor([]).to(device)
-    slot_indices = torch.Tensor([]).to(device)
     samples, gt = [], []
 
-    psnr_val_rgb, ssim_val_rgb = [], []
+    psnr_val_rgb, ssim_val_rgb, slot_indices = [], [], torch.Tensor([]).to(device)
     for i, (images, labels,) in enumerate(dataloader):
+
+        
         images = images.to(device)
+
         (gen_imgs, _, _), _, q_indices = model(images)
 
-        gen_images = concat_all_gather(gen_imgs)
-        images = concat_all_gather(images)
-        slot_indices = torch.unique(torch.cat((slot_indices, concat_all_gather(q_indices))))
+        slot_indices = torch.unique(torch.cat((slot_indices, concat_all_gather(q_indices.flatten()))))
 
-        gen_images = torch.clamp(127.5 * gen_images.permute(0, 2, 3, 1) + 128.0, 0, 255).to('cpu').numpy()
-        images = torch.clamp(127.5 * images.permute(0, 2, 3, 1) + 128.0, 0, 255).to('cpu').numpy()
+        gen_images = concat_all_gather(gen_imgs)
+        np_gens = torch.clamp(127.5 * gen_imgs.permute(0, 2, 3, 1) + 128.0, 0, 255).to('cpu', dtype=torch.uint8).numpy()
+        np_images = torch.clamp(127.5 * images.permute(0, 2, 3, 1) + 128.0, 0, 255).to('cpu', dtype=torch.uint8).numpy()
+        
         if is_main_process():
             print('{}, iter-{}/{}, gen_imgs.shape:{}'.format(this_model_dir, i, total, gen_images.shape))
-            for k, re in enumerate(gen_images):
 
-                rec = Image.fromarray(np.uint8(re))
-                img = Image.fromarray(np.uint8(images[k]))
+        psnr_val_rgb_gpu, ssim_val_rgb_gpu = [], []
+        recon_per_gpu, gt_per_gpu = [], []
+        for k, re in enumerate(np_gens):
 
-                rec = rec.resize((256, 256))
-                img = img.resize((256, 256))
+            rec = Image.fromarray(re)
+            img = Image.fromarray(np_images[k])
 
-                rgb_restored = np.array(rec).astype(np.float32) / 255. # rgb_restored value is between [0, 1]
-                rgb_gt = np.array(img).astype(np.float32) / 255.
-                psnr = psnr_loss(rgb_restored, rgb_gt)
-                ssim = ssim_loss(rgb_restored, rgb_gt, multichannel=True, data_range=2.0, channel_axis=-1)
-                psnr_val_rgb.append(psnr)
-                ssim_val_rgb.append(ssim)
+            rec = rec.resize((256, 256))
+            img = img.resize((256, 256))
 
-                samples.append(np.array(rec))
-                gt.append(np.array(img))
+            rgb_restored = np.array(rec).astype(np.float32) / 255. # rgb_restored value is between [0, 1]
+            rgb_gt = np.array(img).astype(np.float32) / 255.
 
-    return img_indices, slot_indices, (samples, gt, psnr_val_rgb, ssim_val_rgb)
+            recon = torch.tensor(np.array(rec)).to(device)
+            image = torch.tensor(np.array(img)).to(device)
+
+            psnr = psnr_loss(rgb_restored, rgb_gt)
+            ssim = ssim_loss(rgb_restored, rgb_gt, multichannel=True, data_range=2.0, channel_axis=-1)
+            psnr_val_rgb_gpu.append(psnr)
+            ssim_val_rgb_gpu.append(ssim)
+
+            recon_per_gpu.append(recon)
+            gt_per_gpu.append(image)
+
+        psnr_val_rgb_gpu = torch.tensor(psnr_val_rgb_gpu, device=device)
+        ssim_val_rgb_gpu = torch.tensor(ssim_val_rgb_gpu, device = device)
+
+        recon_per_gpu = torch.stack(recon_per_gpu, dim=0)
+        gt_per_gpu = torch.stack(gt_per_gpu, dim=0)
+        
+        psnr_val = concat_all_gather(psnr_val_rgb_gpu)
+        ssim_val = concat_all_gather(ssim_val_rgb_gpu)
+
+        psnr_val = psnr_val.to('cpu', dtype=torch.float32).numpy()
+        ssim_val = ssim_val.to('cpu', dtype=torch.float32).numpy()
+        
+        gen_images = concat_all_gather(recon_per_gpu).to('cpu', dtype=torch.uint8).numpy()
+        images = concat_all_gather(gt_per_gpu).to('cpu',dtype=torch.uint8).numpy()
+
+        psnr_val_rgb.append(psnr_val)
+        ssim_val_rgb.append(ssim_val)
+
+        samples.append(gen_images)
+        gt.append(images)
+
+    return slot_indices, samples, gt, psnr_val_rgb, ssim_val_rgb
 
 if __name__ == '__main__':
 
