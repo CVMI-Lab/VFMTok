@@ -14,7 +14,7 @@ This is a PyTorch/GPU implementation of the paper **Vision Foundation Models as 
 Besides, VFMTok can also achieve **new state-of-the-art image synthesis quality** on the task of class-to-image generation. Please check in [this](https://github.com/CVMI-Lab/VFMTok-RAR) repository.
 
 <!-- <span style="border-bottom:2px dashed black;">We further extend the principle of building image tokenizers directly upon VFMs to the domains of continuous-valued image reconstruction and generation, achieving superior performance in both tasks. The source code has been made publicly available at [VFMTok2](https://github.com/CVMI-Lab/VFMTok2.git).</span> -->
-🔥 - <ins style="color: red; text-decoration: underline;">We further extend the principle of building image tokenizers directly upon VFMs to the domains of continuous-valued image reconstruction and generation, achieving superior performance in both tasks. The source code has been made publicly available at</ins> [VFMTok2](https://github.com/CVMI-Lab/VFMTok2.git).🔥
+🔥<ins style="color: red; text-decoration: underline;">We further extend the principle of building image tokenizers directly upon VFMs to the domains of continuous-valued image reconstruction and generation, achieving superior performance in both tasks. The source code has been made publicly available at</ins> [VFMTok2](https://github.com/CVMI-Lab/VFMTok2.git).🔥
 <!-- <span style="border-bottom:2px dashed yellow;">所添加的需要加下划线的行内文字</span> -->
 This repo contains:
 
