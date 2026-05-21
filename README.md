@@ -13,6 +13,8 @@ This is a PyTorch/GPU implementation of the paper **Vision Foundation Models as 
 
 Besides, VFMTok can also achieve **new state-of-the-art image synthesis quality** on the task of class-to-image generation. Please check in [this](https://github.com/CVMI-Lab/VFMTok-RAR) repository.
 
+<u>We further extend the principle of building image tokenizers directly upon VFMs to the domains of continuous-valued image reconstruction and generation, achieving superior performance in both tasks. The source code has been made publicly available at [VFMTok2](https://github.com/CVMI-Lab/VFMTok2.git).</u>
+
 This repo contains:
 
 * 🪐 A simple PyTorch implementation of VFMTok and various AR generative models.
@@ -39,19 +41,19 @@ This repo contains:
 
 If you are not using Linux, do *NOT* proceed.
 
-1. Clone this repository and navigate to Hita folder
+1. Clone this repository and navigate to VFMTok folder
 ```bash
 git clone https://github.com/CVMI-Lab/VFMTok.git
 cd VFMTok
 ```
 
-2. Install Package
+1. Creat the VFMTok environment
 ```Shell
 conda create -n vfmtok python=3.10 -y
 conda activate vfmtok
 ```
 
-3. Install deformable attention module
+1. Install deformable attention module
 ```
 cd vfmtok/modules/ops
 bash make.sh
