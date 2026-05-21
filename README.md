@@ -70,7 +70,7 @@ In this repo, we release one image tokenizer: VFMTok(DINOv2). It directly utiliz
 
 Method | tokens | rFID (256x256) | rIS (256x256)    | weight
 ---    | :---:  |:---:|:---:   | :---: 
-VFMTok |  256   | 0.98 | 215.4   | [vfmtok-tokenizer.pt](https://huggingface.co/yexiguafu/VFMTok/blob/main/DINOv2/tokenizer/vfmtok-tokenizer.pt)
+VFMTok |  256   | 0.89 | 215.4   | [vfmtok-tokenizer.pt](https://huggingface.co/yexiguafu/VFMTok/blob/main/DINOv2/tokenizer/vfmtok-tokenizer.pt)
 
 ### 2. AR generation models with classifier-free guidance (CFG).
 Once the trained VFMTok(DINOv2) is integrated into autoregressive (AR) generative models, it ahieves notable image generation performance.
